@@ -1,4 +1,5 @@
 import enum
+import io
 from io import BytesIO
 
 
@@ -8,12 +9,28 @@ class Image:
         self.url = url
         self._session = session
 
-    def __str__(self) -> str:
+    def __str__(self):
         return self.url if self.url is not None else ''
+
+    def __len__(self):
+        if self.url:
+            return len(self.url)
+        return 0
+
+    def __hash__(self):
+        return hash(self.url)
+
+    def __bool__(self):
+        return self.url is not None
 
     async def read(self) -> BytesIO:
         _bytes = await self._session.get(str(self.url), res_method = "read")
         return BytesIO(_bytes)
+
+    async def save(self, fp):
+        data = await self.read()
+        with open(fp, "wb") as f:
+            return f.write(data.read())
 
 
 class Colour:
@@ -52,9 +69,10 @@ class Steam:
         self.profile = self.SteamProfile(data.get('profile'))
 
     class SteamID:
-        __slots__ = ("steamid3", "steamid32", "steamid64", "custom_url")
+        __slots__ = ("all", "steamid3", "steamid32", "steamid64", "custom_url")
 
         def __init__(self, data) -> None:
+            self.all = list([data.get('steamid3'), data.get('steamid32'), data.get('steamid64'), data.get('customurl')])
             self.steamid3 = data.get('steamid3')
             self.steamid32 = data.get('steamid32')
             self.steamid64 = data.get('steamid64')

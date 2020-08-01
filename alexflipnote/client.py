@@ -17,6 +17,15 @@ class NotFound(Exception):
     pass
 
 
+class InternalServerError(Exception):
+    pass
+
+class HTTPException(Exception):
+    def __init__(self, response, message):
+        self.response = response
+        self.status = response.status
+        self.message = message
+
 def _parse_text(text: str) -> str:
     replacements = {
         " ": "%20",
@@ -39,20 +48,29 @@ def _parse_text(text: str) -> str:
 class Client:
 
     def __init__(self) -> None:
-        self._session = ClientSession(loop = asyncio.get_event_loop())
+        self._session = ClientSession(loop = get_event_loop())
         self._api_url = "https://api.alexflipnote.dev"
 
-    async def _check_url(self, url: str):
+    async def _check_url(self, url: str, return_response=False):
         response = await self._session.get(url)
-        if response.status == 400:
+        print(response.status, await response.text())
+        # error.group().strip("</p>")
+        if response.status in [400, 404, 500]:
             text = await response.text()
-            get_error = (search('<p>(.+?)</p>', text).group()).strip('</p>')
-            raise BadRequest(get_error)
-        if response.status == 404:
-            text = await response.text()
-            get_error = (search('<p>(.+?)</p>', text).group()).strip('</p>')
-            raise NotFound(get_error)
-        return url
+            error = search('<p>(.+?)</p>', str(text))
+            if response.status == 400:
+                raise BadRequest()
+            elif response.status == 404:
+                raise NotFound()
+            elif response.status == 500:
+                raise InternalServerError()
+            else:
+                raise HTTPException(response, await response.json().get("msg"))
+        else:
+            if return_response:
+                return response
+            return url
+        # can anyone improve this? PRs are more than welcome.
 
     # Json/URL
 
@@ -83,7 +101,7 @@ class Client:
         return url
 
     async def fml(self) -> str:
-        response = await self._session.get(f"{self._api_url}/fml")
+        response = await self._check_url(f"{self._api_url}/fml", return_response=True)
         text = (await response.json()).get('text')
 
         return text
